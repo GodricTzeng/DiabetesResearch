@@ -1,0 +1,209 @@
+graphics.off()  # clear all graphs
+rm(list = ls()) # remove all files from your workspace
+
+##Input all the laboratory data and transform it into data tables
+setwd("~/R_Working_Directory")
+List_AllFiles = list.files(pattern = "\\.XPT$")
+List_AllFiles_2 = lapply(List_AllFiles, read_xpt)
+List_AllFiles_3 = lapply(List_AllFiles_2, as.data.table)
+
+##Load each table
+#Questionnaire of diabetes DIQ & input year data 
+grep('DIQ', List_AllFiles)
+grep('DIQ', List_AllFiles, value = TRUE)
+DIQ = data.table()
+for(i in grep('DIQ', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN','DIQ010')];
+  DIQ = rbind(DIQ, temp_2)
+  DIQ = DIQ[order(SEQN)]
+}
+DIQ = DIQ[DIQ010<=2,c('SEQN','DIQ010')]
+DIQ[DIQ010 == 2]$DIQ010 = 0
+
+DIQ_1 = List_AllFiles_3[[16]]
+DIQ_2 = List_AllFiles_3[[17]]
+DIQ_3 = List_AllFiles_3[[18]]
+DIQ_4 = List_AllFiles_3[[29]]
+
+DIQ$Year = case_when(
+  DIQ$SEQN <= 71916 ~ '20112012',
+  DIQ$SEQN >= 73557 & DIQ$SEQN <= 83731 ~ '20132014',
+  DIQ$SEQN >= 83732 & DIQ$SEQN <= 93702 ~ '20152016',
+  DIQ$SEQN >= 93703 ~ '20172018',
+)
+count(DIQ[DIQ010 == 0])
+count(DIQ[DIQ010 == 1])
+
+#Load fasting glucose 
+grep('GLU', List_AllFiles, value = TRUE)
+grep('GLU', List_AllFiles)
+GLU = data.table()
+for(i in grep('GLU', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN','LBDGLUSI')];
+  GLU = rbind(GLU, temp_2);
+}
+GLU = GLU[complete.cases(LBDGLUSI)]
+JOIN_1 = DIQ[GLU, on = .(SEQN), nomatch = NULL]
+Check_1 = JOIN_1[DIQ010 == 1 | LBDGLUSI >=7]
+count(Check_1)
+count(JOIN_1)
+
+#Load demographic data
+#Select columns including age/gender/education/income
+grep('DEM', List_AllFiles, value = TRUE)
+grep('DEM', List_AllFiles)
+DEM = data.table()
+for(i in grep('DEM', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN','RIAGENDR','RIDAGEYR','DMDEDUC2','INDFMPIR')];
+  DEM = rbind(DEM, temp_2);
+}
+DEM = DEM[complete.cases(DEM)]
+#Feature engineering
+DEM$Gender = ifelse(DEM$RIAGENDR == 1, 'Male','Female')
+#Feature engineering_dummy variables on education_3 levels
+DEM = DEM[DMDEDUC2 < 7]
+DEM$Education = case_when(
+  DEM$DMDEDUC2 ==1 ~ 'UnderHighSchool',
+  DEM$DMDEDUC2 ==2 | DEM$DMDEDUC2 ==3 | DEM$DMDEDUC2 ==4~ 'HighSchool',
+  DEM$DMDEDUC2 ==5 ~ 'AboveHighSchool'
+)
+sum(is.na(DEM$Education))
+sum(is.na(DEM$Gender))
+DEM_2 = DEM[,c('SEQN','Gender','RIDAGEYR','INDFMPIR','Education')]
+DEM_2$Gender = as.factor(DEM_2$Gender) 
+DEM_2$Education = as.factor(DEM_2$Education) 
+JOIN_2 = JOIN_1[DEM_2, on = .(SEQN), nomatch = NULL]
+
+#Load health insurance data
+grep('HIQ', List_AllFiles, value = TRUE)
+HIQ = data.table()
+for(i in grep('HIQ', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN','HIQ011')];
+  HIQ = rbind(HIQ, temp_2);
+  HIQ = HIQ[order(SEQN)];
+  HIQ = HIQ[complete.cases(HIQ)]
+}
+HIQ$HealthInsurance = ifelse(HIQ$HIQ011 == 1,'WithHealthI','WithoutHealthI')
+HIQ$HealthInsurance = as.factor(HIQ$HealthInsurance)
+JOIN_3 = JOIN_2[HIQ, on = .(SEQN), nomatch = NULL]
+count(JOIN_3[DIQ010 == 1 | LBDGLUSI >= 7])
+count(JOIN_3)
+
+#Load Standard Biochemistry Profile
+grep('BIO', List_AllFiles, value = TRUE)
+grep('BIO', List_AllFiles)
+BIO = data.table()
+for(i in grep('BIO', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN',
+                   'LBXSATSI','LBXSAL','LBXSAPSI','LBXSASSI','LBXSC3SI',
+                   'LBXSBU','LBXSCLSI','LBXSCK','LBXSCR','LBXSGTSI',
+                   'LBXSGL','LBXSIR','LBXSLDSI','LBXSPH','LBXSKSI',
+                   'LBXSNASI','LBXSTB','LBXSCA','LBXSCH','LBXSTP',
+                   'LBXSTR','LBXSUA')];
+  BIO = rbind(BIO, temp_2);
+  BIO = BIO[order(SEQN)];
+  BIO = BIO[complete.cases(BIO)]
+}
+JOIN_4 = JOIN_3[BIO, on = .(SEQN), nomatch = NULL]
+count(JOIN_4[DIQ010 == 1 | LBDGLUSI >= 7])
+count(JOIN_4)
+
+#Load blood pressure data
+#column names in P_BPXO.XPT are different from each other
+grep('BPX', List_AllFiles, value = TRUE)
+List_BPX = grep('BPX', List_AllFiles)
+List_AllFiles_3[[List_BPX[4]]] = List_AllFiles_3[[List_BPX[4]]][,c('SEQN','BPXOPLS1')]
+colnames(List_AllFiles_3[[List_BPX[4]]]) = c('SEQN','BPXPLS')
+BPX = data.table()
+for(i in grep('BPX', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN','BPXPLS')];
+  BPX = rbind(BPX, temp_2);
+  BPX = BPX[order(SEQN)];
+  BPX = BPX[complete.cases(BPX)]
+}
+JOIN_5 = JOIN_4[BPX, on = .(SEQN), nomatch = NULL]
+count(JOIN_5[DIQ010 == 1 | LBDGLUSI >= 7])
+count(JOIN_5)
+
+#Load BMI data
+grep('BMX',List_AllFiles, value = TRUE)
+BMI = data.table()
+for(i in grep('BMX', List_AllFiles)){
+  temp = List_AllFiles_3[[i]]; 
+  temp_2 = temp[,c('SEQN','BMXBMI')];
+  BMI = rbind(BMI, temp_2);
+  BMI = BMI[order(SEQN)];
+  BMI = BMI[complete.cases(BMI)]
+}
+JOIN_6 = JOIN_5[BMI, on = .(SEQN), nomatch = NULL]
+count(JOIN_6[DIQ010 == 1 | LBDGLUSI >= 7])
+count(JOIN_6)
+JOIN_6$Diabetes = ifelse(JOIN_6$DIQ010 == 1|JOIN_6$LBDGLUSI >= 7,1,0)
+sum(JOIN_6$Diabetes)
+
+##Building Logistic Regression
+LogisticRegression_Xy = JOIN_6[,-c('SEQN','DIQ010','LBDGLUSI','Year')]
+LogisticRegression_Xy = JOIN_6[,-c('SEQN','DIQ010','LBDGLUSI')]
+
+#Standardization
+LogisticRegression_Xy = cbind(scale(LogisticRegression_Xy[,c('RIDAGEYR','INDFMPIR','LBXSATSI','LBXSAL','LBXSAPSI',
+                                                              'LBXSASSI','LBXSC3SI','LBXSBU','LBXSCLSI','LBXSCK',
+                                                              'LBXSCR','LBXSGTSI','LBXSGL','LBXSIR','LBXSLDSI',
+                                                              'LBXSPH','LBXSKSI','LBXSNASI','LBXSTB','LBXSCA',
+                                                              'LBXSCH','LBXSTP','LBXSTR','LBXSUA','BPXPLS',
+                                                              'BMXBMI')]),
+                              LogisticRegression_Xy[,c('Gender','Education','HealthInsurance','Diabetes')])
+LogisticRegression_1 = glm(LogisticRegression_Xy$Diabetes ~., 
+                           data = LogisticRegression_Xy, 
+                           family = binomial)
+summary(LogisticRegression_1)
+
+##Stepwise method on Logistic Regression
+step(LogisticRegression_1)
+
+##ONE-HOT for X matrix to conduct LASSO
+LASSO_Xy = JOIN_6[,-c('SEQN','DIQ010','LBDGLUSI')]
+LASSO_Xy = JOIN_6[,-c('SEQN','DIQ010','LBDGLUSI','Year')]
+#Gender
+LASSO_Xy$Male = ifelse(LASSO_Xy$Gender == 'Male', 1, 0)
+LASSO_Xy$Female = ifelse(LASSO_Xy$Gender == 'Female', 1, 0)
+#Education
+LASSO_Xy$BeyondHighSchool = ifelse(LASSO_Xy$Education == 'UnderHighSchool', 1, 0)
+LASSO_Xy$HighSchool = ifelse(LASSO_Xy$Education == 'HighSchool', 1, 0) 
+LASSO_Xy$AboveHighSchool = ifelse(LASSO_Xy$Education == 'AboveHighSchool', 1, 0)
+#Health Insurance
+LASSO_Xy$WithHealth1 = ifelse(LASSO_Xy$HealthInsurance == 'WithHealthI',1, 0)
+LASSO_Xy$WithoutHealth1 = ifelse(LASSO_Xy$HealthInsurance == 'WithoutHealthI',1, 0)
+LASSO_Xy = LASSO_Xy[,-c('Gender','Education','HealthInsurance','HIQ011')]
+
+##Standardize
+colnames(LASSO_Xy)
+LASSO_X_scaled = cbind(scale(LASSO_Xy[,c('RIDAGEYR','INDFMPIR','LBXSATSI','LBXSAL','LBXSAPSI',
+                                         'LBXSASSI','LBXSC3SI','LBXSBU','LBXSCLSI','LBXSCK',
+                                         'LBXSCR','LBXSGTSI','LBXSGL','LBXSIR','LBXSLDSI',
+                                         'LBXSPH','LBXSKSI','LBXSNASI','LBXSTB','LBXSCA',
+                                         'LBXSCH','LBXSTP','LBXSTR','LBXSUA','BPXPLS',
+                                         'BMXBMI')]), 
+                       LASSO_Xy[,c('Male','Female','BeyondHighSchool','HighSchool','AboveHighSchool',
+                                   'WithHealth1','WithoutHealth1')])
+LASSO_y = LASSO_Xy[,c('Diabetes')]
+#LASSO method
+LASSO_X_2 = as.matrix(LASSO_X_scaled)
+LASSO_Y_2 = as.matrix(LASSO_y)
+
+
+#Use $lambda.min, lambda.1se to choose best lambda value
+#alpha = 1 means LASSO, alpha = 0 means ridge regression
+LASSO = cv.glmnet(x = LASSO_X_2, y = LASSO_Y_2, family = binomial,
+               alpha = 1)
+plot(LASSO)
+c(LASSO$lambda.min, LASSO$lambda.1se)
+
+#Extracting coefficients of each variables of LASSO models with lambda.min
+coef(LASSO)
