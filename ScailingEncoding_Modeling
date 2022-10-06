@@ -1,0 +1,118 @@
+globals().clear()
+DF_Diabetes = pd.read_csv('Diabetes_2.csv')
+DF_Diabetes = DF_Diabetes.iloc[:,2:35]
+
+DF_Diabetes = pd.DataFrame(
+    {'Sequence':DF_Diabetes.get('SEQN').astype('int'),
+     'DIQ010':DF_Diabetes.get('DIQ010').astype('int'),
+     'SurveyYear':DF_Diabetes.get('Year').astype('int'),
+     'FastingGlucose':DF_Diabetes.get('LBDGLUSI').astype('float'),
+     'Gender':DF_Diabetes.get('Gender').astype('str'),
+     'Age':DF_Diabetes.get('RIDAGEYR').astype('float'),
+     'IncomeToPoverty':DF_Diabetes.get('INDFMPIR').astype('float'),
+     'EducationLevel':DF_Diabetes.get('Education'),
+     'HIStatus':DF_Diabetes.get('HealthInsurance'),
+     'AlanineAminotransferase':DF_Diabetes.get('LBXSATSI').astype('float'),
+     'Albumin':DF_Diabetes.get('LBXSAL').astype('float'),
+     'AlkalinePhosphatase':DF_Diabetes.get('LBXSAPSI').astype('float'),
+     'AspartateAminotransferase': DF_Diabetes.get('LBXSASSI').astype('float'),
+     'Bicarbonate':DF_Diabetes.get('LBXSC3SI').astype('float'),
+     'BloodUreaNitrogen':DF_Diabetes.get('LBXSBU').astype('float'),
+     'Chloride': DF_Diabetes.get('LBXSCLSI').astype('float'),
+     'CreatinePhosphokinase': DF_Diabetes.get('LBXSCK').astype('float'),
+     'Creatinine': DF_Diabetes.get('LBXSCR').astype('float'),
+     'GammaGlutamylTransferase': DF_Diabetes.get('LBXSGTSI').astype('float'),
+     'Glucose': DF_Diabetes.get('LBXSGL').astype('float'),
+     'Iron': DF_Diabetes.get('LBXSIR').astype('float'),
+     'LactateDehydrogenase': DF_Diabetes.get('LBXSLDSI').astype('float'),
+     'Phosphorus': DF_Diabetes.get('LBXSPH').astype('float'),
+     'Potassium': DF_Diabetes.get('LBXSKSI').astype('float'),
+     'Sodium': DF_Diabetes.get('LBXSNASI').astype('float'),
+     'Bilirubin': DF_Diabetes.get('LBXSTB').astype('float'),
+     'Calcium': DF_Diabetes.get('LBXSCA').astype('float'),
+     'Cholesterol': DF_Diabetes.get('LBXSCH').astype('float'),
+     'Protein': DF_Diabetes.get('LBXSTP').astype('float'),
+     'Triglycerides': DF_Diabetes.get('LBXSTR').astype('float'),
+     'UricAcid': DF_Diabetes.get('LBXSUA').astype('float'),
+     'BloodPressure': DF_Diabetes.get('BPXPLS').astype('float'),
+     'BMI': DF_Diabetes.get('BMXBMI').astype('float'),
+     'Diabetes':DF_Diabetes.get('Diabetes')
+     }
+)
+
+###Feature Scaling
+
+Diabetes_numbers = DF_Diabetes.loc[0:,DF_Diabetes.dtypes !=  'object']
+print(Diabetes_numbers.columns)
+Diabetes_numbers.drop(['Sequence','DIQ010','SurveyYear','FastingGlucose',
+                               'Diabetes'], axis=1, inplace=True)
+number_columns = Diabetes_numbers.columns
+print(number_columns)
+Diabetes_numbers = DF_Diabetes[number_columns]
+Diabetes_numbers.head(n=3)
+standardization_scaler = StandardScaler();
+standardization_scaler.fit(Diabetes_numbers)
+Diabetes_numbers = standardization_scaler.transform(Diabetes_numbers)
+DF_Diabetes.loc[0:,number_columns] = Diabetes_numbers
+
+###Encoding for education level and health insurance
+
+DF_Diabetes['EducationLevel'] = \
+    DF_Diabetes['EducationLevel'].apply(lambda x: ['UnderHighSchool', 'HighSchool', 'AboveHighSchool'].index(x))
+DF_Diabetes['HIStatus'] = \
+    DF_Diabetes['HIStatus'].apply(lambda x: ['WithoutHealthI','WithHealthI'].index(x))
+DF_Diabetes['Gender'] =\
+    DF_Diabetes['Gender'].apply(lambda x:['Male','Female'].index(x))
+DF_Diabetes.info()
+
+### Train_test spliting
+DF_Diabetes_X = DF_Diabetes.iloc[:,3:32]
+DF_Diabetes_y = DF_Diabetes['Diabetes']
+X = DF_Diabetes_X
+y = DF_Diabetes_y
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+
+Stepwise_X = DF_Diabetes_X[['Albumin','BloodUreaNitrogen','Bicarbonate','Chloride','Creatinine',
+                         'GammaGlutamylTransferase','Glucose','Iron','Phosphorus','Sodium',
+                         'Calcium','Cholesterol','Protein','Triglycerides','UricAcid',
+                         'BMI', 'Age', 'IncomeToPoverty','EducationLevel'
+                         ]]
+LASSO_X = X[['Albumin','BloodUreaNitrogen','Chloride','Creatinine','GammaGlutamylTransferase',
+                         'Glucose','Phosphorus','Calcium','Cholesterol','Triglycerides','UricAcid','BMI',
+                         'Age', 'IncomeToPoverty','BeyondHighSchool', 'HighSchool', 'AboveHighSchool']]
+
+### XGBoost
+X_train, X_test, y_train, y_test = train_test_split(DF_Diabetes_X, DF_Diabetes_y, test_size=0.2, random_state=1)
+XGB_Original = XGBClassifier()
+y_Prediction_Original = XGB_Original.predict(X_test)
+TN, FP, FN, TP = confusion_matrix(y_test, y_Prediction_Original).ravel()
+print('True Positive(TP)  = ', TP)
+print('False Positive(FP) = ', FP)
+print('False Negative(FN) = ', FN)
+print('True Negative(TN)  = ', TN)objective='binary:logistic')
+
+f1_score = f1_score(y_test,y_Prediction_Original)
+roc_auc_score = roc_auc_score(y_test, y_Prediction_Original)
+print('F1-Score = ', f1_score)
+print('AUC = ', roc_auc_score)
+feature_importance = XGB_Original.feature_importances_
+FeatureImportances_XGB = pd.DataFrame()
+FeatureImportances_XGB['Feature'] = X.columns
+FeatureImportances_XGB['Importances'] = XGB_Original.feature_importances_
+FeatureImportances_XGB = FeatureImportances_XGB.sort_values(by='Importances')
+
+Testing = pd.DataFrame({
+    'Actual':y_test
+    'Prediction':y_Prediction_Original.get
+})
+
+### With LASSO 
+X_train, X_test, y_train, y_test = train_test_split(LASSO_X, DF_Diabetes_y, test_size=0.2, random_state=1)
+XGB_LASSO = XGBClassifier(objective = 'binary:logistic')
+XGB_LASSO.fit(X_train, y_train)
+y_Prediction_LASSO = XGB_LASSO.predict(X_test)
+TN, FP, FN, TP = confusion_matrix(y_test, y_Prediction_LASSO).ravel()
+print('True Positive(TP)  = ', TP)
+print('False Positive(FP) = ', FP)
+print('False Negative(FN) = ', FN)
+print('True Negative(TN)  = ', TN)
